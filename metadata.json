@@ -1,0 +1,5 @@
+{
+  "name": "Copy of OscilloView AI",
+  "description": "A professional-grade oscilloscope data analyzer capable of parsing CSV exports, visualizing time-domain and frequency-domain (FFT) waveforms, and providing AI-powered signal insights using Gemini.",
+  "requestFramePermissions": []
+}

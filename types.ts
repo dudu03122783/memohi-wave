@@ -1,11 +1,21 @@
+
 export interface WaveformDataPoint {
   time: number;
-  amplitude: number;
+  [key: string]: number; // ch0, ch1, etc.
 }
 
 export interface FrequencyDataPoint {
   frequency: number;
-  magnitude: number;
+  [key: string]: number; // ch0, ch1, etc. for magnitudes
+}
+
+export interface ChannelStats {
+  channelId: string;
+  min: number;
+  max: number;
+  average: number;
+  rms: number;
+  dominantFrequency: number;
 }
 
 export interface SignalMetadata {
@@ -14,23 +24,32 @@ export interface SignalMetadata {
   samplingRateHz: number;
   amplitudeScale?: string;
   points: number;
-  yUnit: string; // Added unit field
+  yUnit: string;
   rawHeader: Record<string, string>;
+  channels: string[]; // e.g. ['ch0', 'ch1']
+}
+
+export type WindowFunctionType = 'rectangular' | 'hanning' | 'hamming' | 'blackman';
+export type Language = 'zh' | 'en';
+
+export interface FFTAnalysisResult {
+    fftData: FrequencyDataPoint[];
+    dominantFreqs: Record<string, number>;
+    fftPoints: number;
+    frequencyResolution: number;
 }
 
 export interface ParsedData {
   metadata: SignalMetadata;
   waveform: WaveformDataPoint[];
   fftData: FrequencyDataPoint[];
-  stats: SignalStats;
-}
-
-export interface SignalStats {
-  min: number;
-  max: number;
-  average: number;
-  rms: number;
-  dominantFrequency: number;
+  stats: ChannelStats[];
+  fftMetadata?: {
+      window: WindowFunctionType;
+      scope: 'view' | 'full';
+      points: number;
+      resolution: number;
+  };
 }
 
 export enum AnalysisStatus {

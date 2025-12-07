@@ -1,4 +1,5 @@
 
+
 export interface WaveformDataPoint {
   time: number;
   [key: string]: number; // ch0, ch1, etc.
@@ -15,6 +16,7 @@ export interface ChannelStats {
   max: number;
   average: number;
   rms: number;
+  acRms: number; // AC Coupled RMS (Standard Deviation)
   dominantFrequency: number;
 }
 
@@ -31,6 +33,21 @@ export interface SignalMetadata {
 
 export type WindowFunctionType = 'rectangular' | 'hanning' | 'hamming' | 'blackman';
 export type Language = 'zh' | 'en';
+export type ThemeKey = 'quiet-light' | 'vs-light' | 'solarized-light' | 'dracula' | 'monokai-black';
+
+export interface ThemeColors {
+    name: string;
+    bgApp: string;
+    bgCard: string;
+    bgPanel: string;
+    border: string;
+    textMain: string;
+    textTitle: string;
+    textMuted: string;
+    accent: string;
+    button: string;
+    chartColors: string[];
+}
 
 export interface FFTAnalysisResult {
     fftData: FrequencyDataPoint[];

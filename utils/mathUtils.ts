@@ -239,6 +239,7 @@ export const calculateStats = (waveform: WaveformDataPoint[], channels: string[]
       let min = Infinity;
       let max = -Infinity;
 
+      // 1. First Pass: Sum, Min, Max
       waveform.forEach(p => {
         const val = p[channel] || 0;
         sum += val;
@@ -247,12 +248,25 @@ export const calculateStats = (waveform: WaveformDataPoint[], channels: string[]
         if (val > max) max = val;
       });
 
+      const average = sum / waveform.length;
+      const rms = Math.sqrt(sumSq / waveform.length);
+
+      // 2. Second Pass: AC RMS (Standard Deviation)
+      // AC RMS = sqrt( sum( (x - mean)^2 ) / N )
+      let sumSqDiff = 0;
+      waveform.forEach(p => {
+          const val = p[channel] || 0;
+          sumSqDiff += Math.pow(val - average, 2);
+      });
+      const acRms = Math.sqrt(sumSqDiff / waveform.length);
+
       return {
         channelId: channel,
         min,
         max,
-        average: sum / waveform.length,
-        rms: Math.sqrt(sumSq / waveform.length),
+        average,
+        rms,
+        acRms,
         dominantFrequency: 0 // Will be populated by FFT
       };
   });

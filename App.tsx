@@ -143,8 +143,12 @@ const TRANSLATIONS = {
     fundFreq: "基波频率",
     unbalance: "不平衡度",
     phasorDiagram: "相量图",
-    harmonics: "谐波分析 (Phase U)",
-    calculateButton: "开始计算 (本地)"
+    harmonics: "谐波分析",
+    calculateButton: "开始计算 (本地)",
+    thdTitle: "关于 THD (总谐波失真)",
+    thdExplanation: "THD 反映了信号波形相对于纯正弦波的畸变程度。它是所有谐波成分有效值与基波有效值之比。THD 越低，波形越纯净，电机运行效率越高且发热越少。",
+    thdStandards: "参考标准：通常 IEEE 519 建议电压 THD < 5%。对于电机电流，一般负载下 THD < 10% 是可接受的，但越低越好。",
+    harmonicsExplanation: "该柱状图将畸变的波形分解为不同频率的正弦波。'1f' 是基波（有用能量，如 50/60Hz），'3f'、'5f' 等是奇次谐波（干扰）。谐波过高会导致电机震动和过热。"
   },
   en: {
     multiChannel: "Multi-Channel",
@@ -212,8 +216,12 @@ const TRANSLATIONS = {
     fundFreq: "Fund. Freq",
     unbalance: "Unbalance",
     phasorDiagram: "Phasor Diagram",
-    harmonics: "Harmonics (Phase U)",
-    calculateButton: "Calculate (Local)"
+    harmonics: "Harmonics",
+    calculateButton: "Calculate (Local)",
+    thdTitle: "About THD (Total Harmonic Distortion)",
+    thdExplanation: "THD measures the distortion of the waveform compared to a pure sine wave. It is the ratio of the RMS amplitude of a set of higher harmonic frequencies to the RMS amplitude of the first harmonic. Lower is better.",
+    thdStandards: "Standard Ref: IEEE 519 recommends Voltage THD < 5%. For motor currents, THD < 10% is often acceptable at load, though lower is better for efficiency.",
+    harmonicsExplanation: "This chart decomposes the signal into constituent sine waves. '1f' is the fundamental (useful power). '3f', '5f' etc. are harmonics (pollution). High harmonics cause heating and vibration."
   }
 };
 

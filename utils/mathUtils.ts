@@ -519,3 +519,63 @@ export const downsampleFFT = (data: FrequencyDataPoint[], targetCount = 1500): F
     }
     return result;
 };
+
+// --- Unit Scaling Utility ---
+const PREFIXES: Record<string, number> = {
+  'p': 1e-12, 'n': 1e-9, 'µ': 1e-6, 'u': 1e-6, 'm': 1e-3,
+  '': 1,
+  'k': 1e3, 'M': 1e6, 'G': 1e9, 'T': 1e12
+};
+
+const POWER_TO_PREFIX: Record<string, string> = {
+   '-12': 'p', '-9': 'n', '-6': 'µ', '-3': 'm', '0': '',
+   '3': 'k', '6': 'M', '9': 'G', '12': 'T'
+};
+
+export const getSmartUnitScale = (maxVal: number, unit: string) => {
+    if (!maxVal || maxVal === 0) return { scale: 1, unit };
+    
+    // Attempt to identify current prefix in the input unit (e.g. "m" in "mA")
+    let currentPrefix = '';
+    let baseUnit = unit;
+    let currentMultiplier = 1;
+
+    // Check if unit starts with a known prefix
+    const sortedPrefixes = Object.keys(PREFIXES).filter(k => k !== '').sort((a,b) => b.length - a.length);
+    
+    for (const p of sortedPrefixes) {
+        if (unit.startsWith(p)) {
+             // Heuristic: If unit is "m", it might be meter, not milli. 
+             // But if unit is "mA", "mV", "mW", it's clearly milli.
+             // We check if unit length is longer than prefix length to avoid stripping single char units
+             if (unit.length > p.length) {
+                 currentPrefix = p;
+                 baseUnit = unit.slice(p.length);
+                 currentMultiplier = PREFIXES[p];
+                 break;
+             }
+        }
+    }
+
+    // Calculate the Base Magnitude (e.g. 20000 mA -> 20 A)
+    const baseMax = maxVal * currentMultiplier;
+    const log10 = Math.log10(Math.abs(baseMax));
+    
+    // Find nearest engineering notation power (multiple of 3)
+    let power = Math.floor(log10 / 3) * 3;
+    
+    // Clamp to supported range
+    if (power < -12) power = -12;
+    if (power > 12) power = 12;
+    
+    // Determine new prefix and scaling factor
+    const newPrefix = POWER_TO_PREFIX[power.toString()] ?? '';
+    const newMultiplier = PREFIXES[newPrefix];
+    
+    const scaleFactor = currentMultiplier / newMultiplier;
+    
+    return {
+        scale: scaleFactor,
+        unit: newPrefix + baseUnit
+    };
+};

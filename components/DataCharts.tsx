@@ -14,7 +14,7 @@ import {
   Area
 } from 'recharts';
 import { FrequencyDataPoint, WaveformDataPoint, WindowFunctionType, ThemeColors } from '../types';
-import { downsampleFFT, downsampleWaveform } from '../utils/mathUtils';
+import { downsampleFFT, downsampleWaveform, getSmartUnitScale } from '../utils/mathUtils';
 
 interface DataChartsProps {
   waveform: WaveformDataPoint[];
@@ -109,7 +109,6 @@ export const DataCharts: React.FC<DataChartsProps> = ({
   const currentEndTime = displayWaveform[displayWaveform.length - 1]?.time ?? 1;
 
   // Determine if we need a secondary axis
-  // We look for any visible channel that has a unit different from the base 'unit' prop
   const secondaryAxisInfo = useMemo(() => {
      const diffChannel = visibleChannels.find(ch => {
         const chUnit = channelUnits[ch];
@@ -124,6 +123,32 @@ export const DataCharts: React.FC<DataChartsProps> = ({
      }
      return { exists: false, unit: '' };
   }, [visibleChannels, channelUnits, unit]);
+
+  // Calculate Max Values for Auto-Scaling
+  const axisMaxValues = useMemo(() => {
+      let leftMax = 0;
+      let rightMax = 0;
+      
+      displayWaveform.forEach(p => {
+          visibleChannels.forEach(ch => {
+              const val = Math.abs(p[ch] || 0);
+              const isSecondary = channelUnits[ch] && channelUnits[ch] !== unit;
+              if (isSecondary) {
+                  if (val > rightMax) rightMax = val;
+              } else {
+                  if (val > leftMax) leftMax = val;
+              }
+          });
+      });
+      return { leftMax, rightMax };
+  }, [displayWaveform, visibleChannels, channelUnits, unit]);
+  
+  const leftAxisScale = useMemo(() => getSmartUnitScale(axisMaxValues.leftMax, unit), [axisMaxValues.leftMax, unit]);
+  
+  const rightAxisScale = useMemo(() => {
+      if (!secondaryAxisInfo.exists) return { scale: 1, unit: '' };
+      return getSmartUnitScale(axisMaxValues.rightMax, secondaryAxisInfo.unit);
+  }, [axisMaxValues.rightMax, secondaryAxisInfo]);
 
   // Initialize cursors within view when mode changes
   useEffect(() => {
@@ -554,10 +579,10 @@ export const DataCharts: React.FC<DataChartsProps> = ({
                 domain={yDomain}
                 allowDataOverflow={true}
                 tick={{ fill: '#94a3b8', fontSize: 11 }}
-                tickFormatter={(val) => Number(val).toFixed(2)}
+                tickFormatter={(val) => (val * leftAxisScale.scale).toFixed(2)}
                 axisLine={{ stroke: '#475569', opacity: 0.5 }}
                 tickLine={{ stroke: '#475569', opacity: 0.5 }}
-                label={{ value: unit, angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 12 }}
+                label={{ value: leftAxisScale.unit, angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 12 }}
                 width={50}
               />
               
@@ -568,10 +593,10 @@ export const DataCharts: React.FC<DataChartsProps> = ({
                     orientation="right"
                     domain={['auto', 'auto']} // Auto-scale secondary axis for now
                     tick={{ fill: '#94a3b8', fontSize: 11 }}
-                    tickFormatter={(val) => Number(val).toFixed(2)}
+                    tickFormatter={(val) => (val * rightAxisScale.scale).toFixed(2)}
                     axisLine={{ stroke: '#475569', opacity: 0.5 }}
                     tickLine={{ stroke: '#475569', opacity: 0.5 }}
-                    label={{ value: secondaryAxisInfo.unit, angle: 90, position: 'insideRight', fill: '#94a3b8', fontSize: 12 }}
+                    label={{ value: rightAxisScale.unit, angle: 90, position: 'insideRight', fill: '#94a3b8', fontSize: 12 }}
                     width={50}
                   />
               )}
@@ -580,8 +605,10 @@ export const DataCharts: React.FC<DataChartsProps> = ({
                 contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', color: '#f1f5f9', borderRadius: '8px' }}
                 labelFormatter={(label) => `Time: ${Number(label).toFixed(6)}s`}
                 formatter={(value: number, name: string) => {
-                    const chUnit = channelUnits[name] || unit;
-                    return [`${value.toFixed(4)} ${chUnit}`, (customChannelNames[name] || name).toUpperCase()];
+                    const isSecondary = channelUnits[name] && channelUnits[name] !== unit;
+                    const scaleObj = isSecondary ? rightAxisScale : leftAxisScale;
+                    // Use the calculated scale for consistency with axis
+                    return [`${(value * scaleObj.scale).toFixed(4)} ${scaleObj.unit}`, (customChannelNames[name] || name).toUpperCase()];
                 }}
                 animationDuration={0}
               />

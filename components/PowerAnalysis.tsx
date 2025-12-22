@@ -17,6 +17,7 @@ export const PowerAnalysis: React.FC<PowerAnalysisProps> = ({ waveform, metadata
     const [chV, setChV] = useState<string>('');
     const [result, setResult] = useState<PowerAnalysisResult | null>(null);
     const [harmonicMode, setHarmonicMode] = useState<'percent' | 'magnitude'>('percent');
+    const [selectedHarmonicPhase, setSelectedHarmonicPhase] = useState<number>(0); // 0=U, 1=V, 2=W
 
     // Initialize defaults if available
     useEffect(() => {
@@ -34,57 +35,135 @@ export const PowerAnalysis: React.FC<PowerAnalysisProps> = ({ waveform, metadata
 
     // Phasor Diagram SVG
     const renderPhasor = (res: PowerAnalysisResult) => {
-        const size = 300; // Increased size slightly to accommodate labels
+        const size = 320; // Slightly larger for better labels
         const center = size / 2;
-        const radius = size * 0.35; // Slightly reduced radius ratio to give more margin for text
+        const radius = size * 0.35; 
         
         const maxRms = Math.max(...res.phases.map(p => p.rms));
+        // Avoid division by zero
+        const displayMax = maxRms > 0 ? maxRms : 1; 
         
-        return (
-            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="mx-auto">
-                {/* Background Grid */}
-                <circle cx={center} cy={center} r={radius} stroke={theme.border.replace('border-', '')} strokeWidth="1" fill="none" opacity="0.2" />
-                <circle cx={center} cy={center} r={radius * 0.66} stroke={theme.border.replace('border-', '')} strokeWidth="1" fill="none" opacity="0.2" />
-                <circle cx={center} cy={center} r={radius * 0.33} stroke={theme.border.replace('border-', '')} strokeWidth="1" fill="none" opacity="0.2" />
-                <line x1={center} y1="0" x2={center} y2={size} stroke={theme.border.replace('border-', '')} strokeWidth="1" opacity="0.2" />
-                <line x1="0" y1={center} x2={size} y2={center} stroke={theme.border.replace('border-', '')} strokeWidth="1" opacity="0.2" />
+        const gridValues = [0.33, 0.66, 1.0]; // Percentages
+        
+        // Helper to convert theme bg classes to text classes for SVG currentColor usage
+        // e.g. "bg-[#fff]" -> "text-[#fff]" or "bg-white" -> "text-white"
+        const cardBgTextClass = theme.bgCard.replace('bg-', 'text-');
+        const borderTextClass = theme.border.replace('border-', 'text-');
 
+        return (
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="mx-auto select-none">
+                {/* Background Grid System */}
+                <g className={theme.textMuted}>
+                    {/* Crosshair Axes */}
+                    <line x1={center} y1="20" x2={center} y2={size-20} stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" opacity="0.2" />
+                    <line x1="20" y1={center} x2={size-20} y2={center} stroke="currentColor" strokeWidth="1" strokeDasharray="2 2" opacity="0.2" />
+
+                    {/* Concentric Circles with Values */}
+                    {gridValues.map((pct, i) => {
+                        const r = radius * pct;
+                        const val = displayMax * pct;
+                        return (
+                            <g key={pct}>
+                                 {/* Circle */}
+                                 <circle 
+                                    cx={center} 
+                                    cy={center} 
+                                    r={r} 
+                                    stroke="currentColor" 
+                                    strokeWidth="1" 
+                                    strokeDasharray="4 4" 
+                                    fill="none" 
+                                    opacity="0.3" 
+                                 />
+                                 {/* Label - Placed slightly offset from the Y-axis to avoid overlap */}
+                                 <text 
+                                    x={center + 4} 
+                                    y={center - r - 2} 
+                                    fontSize="9" 
+                                    fill="currentColor" 
+                                    opacity="0.6"
+                                    className="font-mono"
+                                 >
+                                    {val.toFixed(1)}
+                                 </text>
+                            </g>
+                        );
+                    })}
+                </g>
+
+                {/* Vectors */}
                 {res.phases.map((p, idx) => {
-                    const normalizedLen = maxRms > 0 ? (p.rms / maxRms) * radius : 0;
+                    const normalizedLen = displayMax > 0 ? (p.rms / displayMax) * radius : 0;
                     
                     // Coordinates calculation (Standard math polar: 0 is Right. SVG Y is down)
                     // y = center - sin(angle) * r
                     const x = center + Math.cos(p.angleRad) * normalizedLen;
                     const y = center - Math.sin(p.angleRad) * normalizedLen; 
 
-                    const color = idx === 0 ? '#E17055' : idx === 1 ? '#00B894' : '#0984E3'; // R, G, B colors roughly
+                    const color = idx === 0 ? '#E17055' : idx === 1 ? '#00B894' : '#0984E3'; // U, V, W colors
                     
                     // Label Position (pushed out further)
-                    const labelDist = normalizedLen + 40;
+                    const labelDist = normalizedLen + 35;
                     const labelX = center + Math.cos(p.angleRad) * labelDist;
                     const labelY = center - Math.sin(p.angleRad) * labelDist;
 
                     return (
                         <g key={p.phaseId}>
-                            <line x1={center} y1={center} x2={x} y2={y} stroke={color} strokeWidth="3" markerEnd={`url(#arrow-${p.phaseId})`} />
+                            {/* Vector Line */}
+                            <line 
+                                x1={center} 
+                                y1={center} 
+                                x2={x} 
+                                y2={y} 
+                                stroke={color} 
+                                strokeWidth="3" 
+                                markerEnd={`url(#arrow-${p.phaseId})`} 
+                                opacity="0.9"
+                            />
                             
-                            {/* Data Labels */}
-                            <text 
-                                x={labelX} 
-                                y={labelY} 
-                                fill={theme.textMain} 
-                                fontSize="10" 
-                                textAnchor="middle" 
-                                alignmentBaseline="middle"
-                                className="font-mono"
-                            >
-                                <tspan x={labelX} dy="-1.2em" fontWeight="bold" fontSize="12" fill={color}>{p.phaseId}</tspan>
-                                <tspan x={labelX} dy="1.3em">{p.rms.toFixed(2)}{metadata.yUnit}</tspan>
-                                <tspan x={labelX} dy="1.2em">{p.angleDeg.toFixed(1)}°</tspan>
-                            </text>
+                            {/* Connection line to label (dotted) for clarity */}
+                            <line 
+                                x1={x} 
+                                y1={y} 
+                                x2={labelX} 
+                                y2={labelY} 
+                                stroke={color} 
+                                strokeWidth="1" 
+                                strokeDasharray="2 2" 
+                                opacity="0.4"
+                            />
+
+                            {/* Data Labels Group */}
+                            <g transform={`translate(${labelX}, ${labelY})`}>
+                                {/* Background Box - using currentColor derived from theme.bgCard */}
+                                <rect 
+                                    x="-26" 
+                                    y="-20" 
+                                    width="52" 
+                                    height="40" 
+                                    className={`${cardBgTextClass} ${borderTextClass}`}
+                                    fill="currentColor" 
+                                    fillOpacity="0.95" 
+                                    stroke="currentColor" // Use the border color for stroke
+                                    strokeWidth="1"
+                                    rx="4" 
+                                />
+                                {/* Text Content */}
+                                <text 
+                                    className={`${theme.textMain} font-mono font-bold`}
+                                    fill="currentColor"
+                                    fontSize="10" 
+                                    textAnchor="middle" 
+                                    alignmentBaseline="middle"
+                                >
+                                    <tspan x="0" dy="-0.8em" fill={color} fontWeight="900" fontSize="11">{p.phaseId}</tspan>
+                                    <tspan x="0" dy="1.4em">{p.rms.toFixed(1)}</tspan>
+                                    <tspan x="0" dy="1.2em">{p.angleDeg.toFixed(0)}°</tspan>
+                                </text>
+                            </g>
 
                             <defs>
-                                <marker id={`arrow-${p.phaseId}`} markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                                <marker id={`arrow-${p.phaseId}`} markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
                                     <path d="M0,0 L0,6 L9,3 z" fill={color} />
                                 </marker>
                             </defs>
@@ -96,6 +175,7 @@ export const PowerAnalysis: React.FC<PowerAnalysisProps> = ({ waveform, metadata
     };
 
     const colors = ['#E17055', '#00B894', '#0984E3'];
+    const phaseLabels = ['U', 'V', 'W'];
 
     return (
         <div className={`${theme.bgCard} p-5 rounded-xl border ${theme.border} shadow-sm animate-fade-in`}>
@@ -174,10 +254,28 @@ export const PowerAnalysis: React.FC<PowerAnalysisProps> = ({ waveform, metadata
                                  ))}
                              </div>
                          </div>
+
+                         {/* THD Explanation Block */}
+                         <div className={`mt-6 p-3 rounded-lg ${theme.bgApp} border ${theme.border}`}>
+                            <div className="flex items-center gap-2 mb-1">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={theme.accent}>
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                                </svg>
+                                <span className={`text-[11px] font-bold ${theme.textMain}`}>{translations.thdTitle || "THD Info"}</span>
+                            </div>
+                            <p className={`text-[10px] ${theme.textMuted} leading-relaxed mb-2`}>
+                                {translations.thdExplanation}
+                            </p>
+                             <p className={`text-[10px] ${theme.textMain} leading-relaxed font-medium bg-black/10 p-1 rounded`}>
+                                {translations.thdStandards}
+                            </p>
+                        </div>
                     </div>
 
                     {/* 2. Phasor Diagram */}
-                    <div className={`${theme.bgPanel} p-4 rounded-lg border ${theme.border} flex flex-col items-center justify-center`}>
+                    <div className={`${theme.bgPanel} p-4 rounded-lg border ${theme.border} flex flex-col items-center justify-center overflow-hidden`}>
                         <h4 className={`text-sm font-bold ${theme.textMain} uppercase mb-4 self-start`}>{translations.phasorDiagram}</h4>
                         {renderPhasor(result)}
                     </div>
@@ -197,15 +295,42 @@ export const PowerAnalysis: React.FC<PowerAnalysisProps> = ({ waveform, metadata
                                     onClick={() => setHarmonicMode('magnitude')}
                                     className={`px-2 py-1 rounded border ${harmonicMode === 'magnitude' ? `${theme.bgApp} border-slate-500 text-white` : `border-transparent ${theme.textMuted}`}`}
                                 >
-                                    Unit ({metadata.yUnit})
+                                    Unit
                                 </button>
                             </div>
                         </div>
+
+                        {/* Phase Selector for Harmonics */}
+                         <div className="flex items-center gap-2 mb-2">
+                             <span className={`text-[10px] ${theme.textMuted} uppercase`}>Show Phase:</span>
+                             <div className="flex gap-1">
+                                 {phaseLabels.map((ph, idx) => (
+                                     <button
+                                         key={ph}
+                                         onClick={() => setSelectedHarmonicPhase(idx)}
+                                         className={`w-6 h-6 rounded text-xs font-bold transition-all ${
+                                             selectedHarmonicPhase === idx 
+                                             ? `text-white shadow-md scale-110` 
+                                             : `${theme.textMuted} opacity-50 hover:opacity-100`
+                                         }`}
+                                         style={{ backgroundColor: selectedHarmonicPhase === idx ? colors[idx] : undefined, border: selectedHarmonicPhase !== idx ? `1px solid ${theme.border.replace('border-', '')}` : undefined }}
+                                     >
+                                         {ph}
+                                     </button>
+                                 ))}
+                             </div>
+                         </div>
+
                         <div className="flex-1 min-h-[200px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={result.phases[0].harmonics.slice(0, 10)} margin={{top: 15, right: 5, left: -10, bottom: 0}}>
+                                <BarChart data={result.phases[selectedHarmonicPhase].harmonics.slice(0, 15)} margin={{top: 15, right: 5, left: -10, bottom: 0}}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                                    <XAxis dataKey="order" tick={{fontSize: 10}} tickFormatter={(val) => `${val}x`} stroke={theme.textMuted} />
+                                    <XAxis 
+                                        dataKey="order" 
+                                        tick={{fontSize: 10}} 
+                                        tickFormatter={(val) => `${val}f`} 
+                                        stroke={theme.textMuted} 
+                                    />
                                     <YAxis tick={{fontSize: 10}} stroke={theme.textMuted} />
                                     <Tooltip 
                                         cursor={{fill: 'rgba(255,255,255,0.05)'}}
@@ -214,15 +339,15 @@ export const PowerAnalysis: React.FC<PowerAnalysisProps> = ({ waveform, metadata
                                             harmonicMode === 'percent' ? `${val.toFixed(2)}%` : val.toFixed(3), 
                                             harmonicMode === 'percent' ? '% Fund' : metadata.yUnit
                                         ]}
-                                        labelFormatter={(label) => `${label}th Order`}
+                                        labelFormatter={(label) => `${label}f (Harmonic Order)`}
                                     />
                                     <Bar 
                                         dataKey={harmonicMode === 'percent' ? 'percentage' : 'magnitude'} 
                                         name={harmonicMode === 'percent' ? 'Mag %' : `Mag (${metadata.yUnit})`} 
                                         radius={[4, 4, 0, 0]}
                                     >
-                                        {result.phases[0].harmonics.slice(0, 10).map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={index === 0 ? '#6C5CE7' : '#fdcb6e'} />
+                                        {result.phases[selectedHarmonicPhase].harmonics.slice(0, 15).map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={index === 0 ? colors[selectedHarmonicPhase] : '#fdcb6e'} />
                                         ))}
                                         <LabelList 
                                             dataKey={harmonicMode === 'percent' ? 'percentage' : 'magnitude'} 
@@ -235,7 +360,11 @@ export const PowerAnalysis: React.FC<PowerAnalysisProps> = ({ waveform, metadata
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
-                        <div className={`text-[10px] text-center mt-2 ${theme.textMuted}`}>Showing harmonics for Phase U relative to fundamental</div>
+                        <div className={`mt-3 p-2 rounded ${theme.bgApp} border ${theme.border}`}>
+                            <p className={`text-[9px] ${theme.textMuted} leading-tight`}>
+                                {translations.harmonicsExplanation}
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}

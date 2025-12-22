@@ -19,8 +19,9 @@ import { downsampleFFT, downsampleWaveform } from '../utils/mathUtils';
 interface DataChartsProps {
   waveform: WaveformDataPoint[];
   fftData: FrequencyDataPoint[];
-  unit: string;
+  unit: string; // Base unit for left axis
   channels: string[];
+  channelUnits?: Record<string, string>; // Map of channel ID to unit
   customChannelNames?: Record<string, string>;
   
   fullTimeRange: { start: number, end: number } | null;
@@ -69,6 +70,7 @@ export const DataCharts: React.FC<DataChartsProps> = ({
   fftData, 
   unit, 
   channels,
+  channelUnits = {},
   customChannelNames = {},
   fullTimeRange,
   visibleChannels,
@@ -105,6 +107,23 @@ export const DataCharts: React.FC<DataChartsProps> = ({
 
   const currentStartTime = displayWaveform[0]?.time ?? 0;
   const currentEndTime = displayWaveform[displayWaveform.length - 1]?.time ?? 1;
+
+  // Determine if we need a secondary axis
+  // We look for any visible channel that has a unit different from the base 'unit' prop
+  const secondaryAxisInfo = useMemo(() => {
+     const diffChannel = visibleChannels.find(ch => {
+        const chUnit = channelUnits[ch];
+        return chUnit && chUnit !== unit;
+     });
+     
+     if (diffChannel) {
+        return {
+           exists: true,
+           unit: channelUnits[diffChannel]
+        };
+     }
+     return { exists: false, unit: '' };
+  }, [visibleChannels, channelUnits, unit]);
 
   // Initialize cursors within view when mode changes
   useEffect(() => {
@@ -195,15 +214,26 @@ export const DataCharts: React.FC<DataChartsProps> = ({
               // Auto scale logic (must match what Recharts calculates)
               displayWaveform.forEach(p => {
                   visibleChannels.forEach(ch => {
-                      const val = p[ch];
-                      if (val < min) min = val;
-                      if (val > max) max = val;
+                      // Only consider base unit channels for cursor scaling if on left axis
+                      // This is a simplification for cursors
+                      if (!channelUnits[ch] || channelUnits[ch] === unit) {
+                          const val = p[ch];
+                          if (val < min) min = val;
+                          if (val > max) max = val;
+                      }
                   });
               });
-              // Add a tiny padding if it was exactly auto to match recharts default behavior roughly,
-              // or rely on user having set a zoom. 
-              // To be precise, if domain is auto, Recharts adds padding. 
-              // We'll assume strict min/max for cursor setting to be predictable enough.
+              
+              if (min === Infinity) {
+                   // Fallback if only math channels visible
+                   displayWaveform.forEach(p => {
+                      visibleChannels.forEach(ch => {
+                          const val = p[ch];
+                          if (val < min) min = val;
+                          if (val > max) max = val;
+                      });
+                   });
+              }
           }
 
           if (min === Infinity || max === -Infinity) return;
@@ -293,8 +323,11 @@ export const DataCharts: React.FC<DataChartsProps> = ({
       if (min === Infinity || max === -Infinity) {
           displayWaveform.forEach(p => {
              visibleChannels.forEach(ch => {
-                 if (p[ch] < min) min = p[ch];
-                 if (p[ch] > max) max = p[ch];
+                 // Only scale base unit channels for manual zoom currently
+                 if (!channelUnits[ch] || channelUnits[ch] === unit) {
+                     if (p[ch] < min) min = p[ch];
+                     if (p[ch] > max) max = p[ch];
+                 }
              });
           });
       }
@@ -372,6 +405,9 @@ export const DataCharts: React.FC<DataChartsProps> = ({
                             style={{ backgroundColor: visibleChannels.includes(ch) ? getChannelColor(idx) : '#475569' }}
                         ></span>
                         {customChannelNames[ch] || ch}
+                        {channelUnits[ch] && channelUnits[ch] !== unit && (
+                            <span className="text-[9px] opacity-70 ml-0.5">({channelUnits[ch]})</span>
+                        )}
                     </button>
                 ))}
              </div>
@@ -499,7 +535,7 @@ export const DataCharts: React.FC<DataChartsProps> = ({
               onClick={handleChartClick}
               onMouseMove={handleChartMouseMove}
               onMouseUp={handleChartMouseUp}
-              margin={{ top: 10, right: 30, left: 10, bottom: 10 }}
+              margin={{ top: 10, right: secondaryAxisInfo.exists ? 40 : 30, left: 10, bottom: 10 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#64748b" strokeOpacity={0.2} vertical={true} />
               <XAxis 
@@ -512,7 +548,9 @@ export const DataCharts: React.FC<DataChartsProps> = ({
                 axisLine={{ stroke: '#475569', opacity: 0.5 }}
                 tickLine={{ stroke: '#475569', opacity: 0.5 }}
               />
+              {/* Primary Y Axis (Left) */}
               <YAxis 
+                yAxisId="left"
                 domain={yDomain}
                 allowDataOverflow={true}
                 tick={{ fill: '#94a3b8', fontSize: 11 }}
@@ -522,16 +560,39 @@ export const DataCharts: React.FC<DataChartsProps> = ({
                 label={{ value: unit, angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 12 }}
                 width={50}
               />
+              
+              {/* Secondary Y Axis (Right) - Only if mixed units exist */}
+              {secondaryAxisInfo.exists && (
+                 <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    domain={['auto', 'auto']} // Auto-scale secondary axis for now
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    tickFormatter={(val) => Number(val).toFixed(2)}
+                    axisLine={{ stroke: '#475569', opacity: 0.5 }}
+                    tickLine={{ stroke: '#475569', opacity: 0.5 }}
+                    label={{ value: secondaryAxisInfo.unit, angle: 90, position: 'insideRight', fill: '#94a3b8', fontSize: 12 }}
+                    width={50}
+                  />
+              )}
+
               <Tooltip 
                 contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: '#334155', color: '#f1f5f9', borderRadius: '8px' }}
                 labelFormatter={(label) => `Time: ${Number(label).toFixed(6)}s`}
-                formatter={(value: number, name: string) => [value.toFixed(4), (customChannelNames[name] || name).toUpperCase()]}
+                formatter={(value: number, name: string) => {
+                    const chUnit = channelUnits[name] || unit;
+                    return [`${value.toFixed(4)} ${chUnit}`, (customChannelNames[name] || name).toUpperCase()];
+                }}
                 animationDuration={0}
               />
-              {channels.map((ch, idx) => (
-                 visibleChannels.includes(ch) && (
+              {channels.map((ch, idx) => {
+                 if (!visibleChannels.includes(ch)) return null;
+                 const isSecondary = channelUnits[ch] && channelUnits[ch] !== unit;
+                 
+                 return (
                   <Line 
                     key={ch}
+                    yAxisId={isSecondary ? "right" : "left"}
                     type="monotone" 
                     dataKey={ch} 
                     stroke={getChannelColor(idx)} 
@@ -540,27 +601,28 @@ export const DataCharts: React.FC<DataChartsProps> = ({
                     isAnimationActive={false}
                     activeDot={{ r: 4, strokeWidth: 0 }}
                   />
-                 )
-              ))}
+                 );
+              })}
               
               {cursorMode === 'time' && (
                   <>
-                    <ReferenceLine x={timeCursors.t1} stroke={theme.textTitle} strokeDasharray="3 3" label={{ value: 'T1', position: 'insideTopLeft', fill: theme.textTitle, fontSize: 10 }} />
-                    <ReferenceLine x={timeCursors.t2} stroke={theme.textTitle} strokeDasharray="3 3" label={{ value: 'T2', position: 'insideTopRight', fill: theme.textTitle, fontSize: 10 }} />
-                    <ReferenceArea x1={timeCursors.t1} x2={timeCursors.t2} fill={theme.accent.split('-')[1] === 'white' ? '#fff' : theme.textMuted} fillOpacity={0.05} />
+                    <ReferenceLine yAxisId="left" x={timeCursors.t1} stroke={theme.textTitle} strokeDasharray="3 3" label={{ value: 'T1', position: 'insideTopLeft', fill: theme.textTitle, fontSize: 10 }} />
+                    <ReferenceLine yAxisId="left" x={timeCursors.t2} stroke={theme.textTitle} strokeDasharray="3 3" label={{ value: 'T2', position: 'insideTopRight', fill: theme.textTitle, fontSize: 10 }} />
+                    <ReferenceArea yAxisId="left" x1={timeCursors.t1} x2={timeCursors.t2} fill={theme.accent.split('-')[1] === 'white' ? '#fff' : theme.textMuted} fillOpacity={0.05} />
                   </>
               )}
 
               {cursorMode === 'amplitude' && (
                   <>
-                    <ReferenceLine y={ampCursors.y1} stroke={theme.textTitle} strokeDasharray="3 3" label={{ value: 'Y1', position: 'insideRight', fill: theme.textTitle, fontSize: 10 }} />
-                    <ReferenceLine y={ampCursors.y2} stroke={theme.textTitle} strokeDasharray="3 3" label={{ value: 'Y2', position: 'insideRight', fill: theme.textTitle, fontSize: 10 }} />
-                    <ReferenceArea y1={ampCursors.y1} y2={ampCursors.y2} fill={theme.accent.split('-')[1] === 'white' ? '#fff' : theme.textMuted} fillOpacity={0.05} />
+                    <ReferenceLine yAxisId="left" y={ampCursors.y1} stroke={theme.textTitle} strokeDasharray="3 3" label={{ value: 'Y1', position: 'insideRight', fill: theme.textTitle, fontSize: 10 }} />
+                    <ReferenceLine yAxisId="left" y={ampCursors.y2} stroke={theme.textTitle} strokeDasharray="3 3" label={{ value: 'Y2', position: 'insideRight', fill: theme.textTitle, fontSize: 10 }} />
+                    <ReferenceArea yAxisId="left" y1={ampCursors.y1} y2={ampCursors.y2} fill={theme.accent.split('-')[1] === 'white' ? '#fff' : theme.textMuted} fillOpacity={0.05} />
                   </>
               )}
               
               {refAreaLeft && refAreaRight && (
                 <ReferenceArea 
+                  yAxisId="left"
                   x1={refAreaLeft} 
                   x2={refAreaRight} 
                   strokeOpacity={0.3} 

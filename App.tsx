@@ -234,6 +234,7 @@ const App: React.FC = () => {
   const [visibleChannels, setVisibleChannels] = useState<string[]>([]);
   const [selectedFftChannel, setSelectedFftChannel] = useState<string | null>(null);
   const [channelNames, setChannelNames] = useState<Record<string, string>>({});
+  const [channelUnits, setChannelUnits] = useState<Record<string, string>>({}); // Store unit per channel
   const [editingChannel, setEditingChannel] = useState<string | null>(null);
   const [tempName, setTempName] = useState("");
 
@@ -258,6 +259,7 @@ const App: React.FC = () => {
     setIsZoomed(false);
     setMathCount(0);
     setChannelNames({});
+    setChannelUnits({});
 
     try {
       const text = await file.text();
@@ -287,6 +289,11 @@ const App: React.FC = () => {
             resolution: frequencyResolution
         }
       };
+      
+      // Initialize units for original channels
+      const initialUnits: Record<string, string> = {};
+      metadata.channels.forEach(ch => initialUnits[ch] = metadata.yUnit);
+      setChannelUnits(initialUnits);
 
       setVisibleChannels(metadata.channels);
       setSelectedFftChannel(metadata.channels[0] || null);
@@ -309,6 +316,7 @@ const App: React.FC = () => {
     setIsZoomed(false);
     setMathCount(0);
     setChannelNames({});
+    setChannelUnits({});
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -406,6 +414,10 @@ const App: React.FC = () => {
     setMathCount(prev => prev + 1);
     setVisibleChannels(prev => [...prev, newChName]);
     if (!selectedFftChannel) setSelectedFftChannel(newChName);
+    
+    // Update Units
+    const finalUnit = mathUnit.trim() || originalData.metadata.yUnit;
+    setChannelUnits(prev => ({ ...prev, [newChName]: finalUnit }));
 
     // 6. Refresh view
     updateDisplayedData(newWaveform, newStats, fftConfig, newOriginalData);
@@ -649,6 +661,7 @@ const App: React.FC = () => {
                 fftData={displayedData.fftData}
                 unit={displayedData.metadata.yUnit}
                 channels={displayedData.metadata.channels}
+                channelUnits={channelUnits}
                 customChannelNames={channelNames}
                 fullTimeRange={originalData ? { start: originalData.waveform[0].time, end: originalData.waveform[originalData.waveform.length-1].time } : null}
                 visibleChannels={visibleChannels}
@@ -712,23 +725,23 @@ const App: React.FC = () => {
                                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
                                     <div>
                                         <span className={`${theme.textMuted} text-[10px] uppercase block mb-0.5`}>{t.peakMax}</span>
-                                        <span className={`font-mono ${theme.textMain}`}>{stat.max.toFixed(3)} {stat.channelId.includes('Math') ? mathUnit : displayedData.metadata.yUnit}</span>
+                                        <span className={`font-mono ${theme.textMain}`}>{stat.max.toFixed(3)} {channelUnits[stat.channelId] || displayedData.metadata.yUnit}</span>
                                     </div>
                                     <div>
                                         <span className={`${theme.textMuted} text-[10px] uppercase block mb-0.5`}>{t.peakMin}</span>
-                                        <span className={`font-mono ${theme.textMain}`}>{stat.min.toFixed(3)} {stat.channelId.includes('Math') ? mathUnit : displayedData.metadata.yUnit}</span>
+                                        <span className={`font-mono ${theme.textMain}`}>{stat.min.toFixed(3)} {channelUnits[stat.channelId] || displayedData.metadata.yUnit}</span>
                                     </div>
                                     <div>
                                         <span className={`${theme.textMuted} text-[10px] uppercase block mb-0.5`}>{t.average}</span>
-                                        <span className={`font-mono ${theme.textMain}`}>{stat.average.toFixed(3)} {stat.channelId.includes('Math') ? mathUnit : displayedData.metadata.yUnit}</span>
+                                        <span className={`font-mono ${theme.textMain}`}>{stat.average.toFixed(3)} {channelUnits[stat.channelId] || displayedData.metadata.yUnit}</span>
                                     </div>
                                     <div>
                                         <span className={`${theme.textMuted} text-[10px] uppercase block mb-0.5`}>{t.rms}</span>
-                                        <span className={`font-mono ${theme.textMain}`}>{stat.rms.toFixed(3)} {stat.channelId.includes('Math') ? mathUnit : displayedData.metadata.yUnit}</span>
+                                        <span className={`font-mono ${theme.textMain}`}>{stat.rms.toFixed(3)} {channelUnits[stat.channelId] || displayedData.metadata.yUnit}</span>
                                     </div>
                                     <div>
                                         <span className={`${theme.textMuted} text-[10px] uppercase block mb-0.5 text-blue-400 font-bold`}>{t.acRms}</span>
-                                        <span className={`font-mono ${theme.textMain}`}>{stat.acRms.toFixed(3)} {stat.channelId.includes('Math') ? mathUnit : displayedData.metadata.yUnit}</span>
+                                        <span className={`font-mono ${theme.textMain}`}>{stat.acRms.toFixed(3)} {channelUnits[stat.channelId] || displayedData.metadata.yUnit}</span>
                                     </div>
                                 </div>
                             </div>

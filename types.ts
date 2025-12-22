@@ -75,3 +75,26 @@ export enum AnalysisStatus {
   COMPLETED = 'COMPLETED',
   ERROR = 'ERROR',
 }
+
+export interface HarmonicInfo {
+    order: number;
+    frequency: number;
+    magnitude: number;
+    percentage: number; // Relative to fundamental
+}
+
+export interface PhaseResult {
+    phaseId: string; // 'U', 'V', 'W'
+    rms: number;
+    frequency: number;
+    angleRad: number;
+    angleDeg: number;
+    thd: number; // Total Harmonic Distortion %
+    harmonics: HarmonicInfo[];
+}
+
+export interface PowerAnalysisResult {
+    fundamentalFreq: number;
+    phases: PhaseResult[];
+    unbalance: number; // Max deviation from avg RMS %
+}

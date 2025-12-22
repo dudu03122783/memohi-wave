@@ -5,6 +5,7 @@ import { calculateStats, parseOscilloscopeCsv, performFFTAnalysis } from './util
 import { analyzeSignalWithGemini } from './services/geminiService';
 import { DataCharts } from './components/DataCharts';
 import { MetadataCard } from './components/MetadataCard';
+import { PowerAnalysis } from './components/PowerAnalysis';
 
 // Theme Definitions
 const THEMES: Record<ThemeKey, ThemeColors> = {
@@ -134,7 +135,16 @@ const TRANSLATIONS = {
     cursorAmp: "幅值 (横向)",
     cursorNone: "关闭",
     cursorSet: "点击图表设置",
-    renameHint: "点击名称可重命名"
+    renameHint: "点击名称可重命名",
+    powerAnalysis: "三相电流质量分析 (电机)",
+    phaseU: "U相 (输入)",
+    phaseV: "V相 (输入)",
+    qualityMetrics: "质量指标",
+    fundFreq: "基波频率",
+    unbalance: "不平衡度",
+    phasorDiagram: "相量图",
+    harmonics: "谐波分析 (Phase U)",
+    calculateButton: "开始计算 (本地)"
   },
   en: {
     multiChannel: "Multi-Channel",
@@ -194,7 +204,16 @@ const TRANSLATIONS = {
     cursorAmp: "Amp (Horiz)",
     cursorNone: "Off",
     cursorSet: "Click Chart to Set",
-    renameHint: "Click name to rename"
+    renameHint: "Click name to rename",
+    powerAnalysis: "3-Phase Power Analysis (Motor)",
+    phaseU: "Phase U (Input)",
+    phaseV: "Phase V (Input)",
+    qualityMetrics: "Quality Metrics",
+    fundFreq: "Fund. Freq",
+    unbalance: "Unbalance",
+    phasorDiagram: "Phasor Diagram",
+    harmonics: "Harmonics (Phase U)",
+    calculateButton: "Calculate (Local)"
   }
 };
 
@@ -616,6 +635,14 @@ const App: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            <PowerAnalysis 
+                waveform={displayedData.waveform}
+                metadata={displayedData.metadata}
+                theme={theme}
+                channelNames={channelNames}
+                translations={t}
+            />
 
             <DataCharts 
                 waveform={displayedData.waveform}

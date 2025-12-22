@@ -1,5 +1,5 @@
 
-import { ChannelStats, FFTAnalysisResult, FrequencyDataPoint, SignalMetadata, WaveformDataPoint, WindowFunctionType } from '../types';
+import { ChannelStats, FFTAnalysisResult, FrequencyDataPoint, SignalMetadata, WaveformDataPoint, WindowFunctionType, PowerAnalysisResult, PhaseResult, HarmonicInfo } from '../types';
 
 // A simplified FFT implementation for real-valued signals
 const fft = (data: number[]): { real: number[]; imag: number[] } => {
@@ -297,25 +297,19 @@ export const performFFTAnalysis = (
         // 1. Apply Window Function
         amplitudes = applyWindow(amplitudes, windowType);
 
-        // 2. FFT (Zero padding happens inside if needed, but we do explicit power of 2 check usually. 
-        // Our 'fft' helper handles power of 2 padding internally recursively, but let's rely on that.)
-        // Note: 'fft' helper zero pads to next power of 2.
+        // 2. FFT
         const { real, imag } = fft(amplitudes);
         
         const magnitudes: number[] = [];
-        // Real FFT returns symmetric, we only need first half
         const halfN = Math.floor(real.length / 2);
         
         let maxMag = -1;
         let domFreq = 0;
 
         for(let i = 0; i < halfN; i++) {
-            // Normalize
-            // Magnitude = sqrt(r^2 + i^2) * 2 / N
             const mag = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]) * (2 / real.length);
             magnitudes.push(mag);
 
-            // Skip DC (index 0) for dominant frequency search
             if (i > 0 && mag > maxMag) {
                 maxMag = mag;
                 domFreq = i * sampleRateHz / real.length;
@@ -325,7 +319,6 @@ export const performFFTAnalysis = (
         dominantFreqs[channel] = domFreq;
     });
 
-    // Construct FrequencyDataPoint array
     const frequencyData: FrequencyDataPoint[] = [];
     const firstCh = channels[0];
     if (!firstCh) return { fftData: [], dominantFreqs: {}, fftPoints: fftLength, frequencyResolution };
@@ -346,6 +339,148 @@ export const performFFTAnalysis = (
         dominantFreqs, 
         fftPoints: fftLength,
         frequencyResolution
+    };
+};
+
+export const calculatePowerQuality = (
+    waveform: WaveformDataPoint[],
+    sampleRateHz: number,
+    chU: string,
+    chV: string
+): PowerAnalysisResult => {
+    
+    // 1. Reconstruct Data Arrays
+    const dataU = waveform.map(p => p[chU] || 0);
+    const dataV = waveform.map(p => p[chV] || 0);
+    // Assuming balanced system with no ground return: Iu + Iv + Iw = 0 => Iw = -Iu - Iv
+    const dataW = dataU.map((u, i) => -u - dataV[i]);
+
+    const phasesData = [
+        { id: 'U', data: dataU },
+        { id: 'V', data: dataV },
+        { id: 'W', data: dataW }
+    ];
+
+    const results: PhaseResult[] = [];
+    
+    // Use the dominant frequency of U as system frequency
+    // Perform FFT with Hanning for cleaner harmonics
+    const n = dataU.length;
+    // const fftLength = Math.pow(2, Math.ceil(Math.log2(n))); // Not used in this simplified scope
+    
+    // Helper to process a single phase
+    const processPhase = (phaseId: string, data: number[]): PhaseResult => {
+        // RMS (Time Domain)
+        let sumSq = 0;
+        data.forEach(x => sumSq += x * x);
+        const rms = Math.sqrt(sumSq / n);
+
+        // FFT for Phase & Harmonics
+        const windowed = applyWindow(data, 'hanning');
+        const { real, imag } = fft(windowed);
+        
+        const halfN = Math.floor(real.length / 2);
+        let maxMag = -1;
+        let peakIndex = 0;
+
+        const magnitudes: number[] = [];
+        const phases: number[] = [];
+
+        for (let i = 0; i < halfN; i++) {
+            // Magnitude
+            const mag = Math.sqrt(real[i]*real[i] + imag[i]*imag[i]) * (2 / real.length);
+            magnitudes.push(mag);
+            // Phase (atan2 returns -PI to PI)
+            phases.push(Math.atan2(imag[i], real[i]));
+
+            // Find Fundamental (ignore DC at 0)
+            if (i > 1 && mag > maxMag) {
+                maxMag = mag;
+                peakIndex = i;
+            }
+        }
+        
+        const fundamentalFreq = peakIndex * sampleRateHz / real.length;
+        const fundamentalPhaseRad = phases[peakIndex]; // Phase relative to FFT window start
+        
+        // Harmonics (Fundamental, 2nd, 3rd ... up to 15th)
+        const harmonics: HarmonicInfo[] = [];
+        let harmonicsSumSq = 0;
+
+        for (let order = 1; order <= 15; order++) {
+            const idealTargetIdx = peakIndex * order;
+            let bestIdx = idealTargetIdx;
+            let bestMag = -1;
+
+            // Search small window around target index for peak (handle leakage)
+            const searchRadius = 2; 
+            for (let offset = -searchRadius; offset <= searchRadius; offset++) {
+                const idx = idealTargetIdx + offset;
+                if (idx > 0 && idx < halfN) {
+                    if (magnitudes[idx] > bestMag) {
+                        bestMag = magnitudes[idx];
+                        bestIdx = idx;
+                    }
+                }
+            }
+
+            if (bestIdx < halfN) {
+                const mag = bestMag;
+                harmonics.push({
+                    order,
+                    frequency: bestIdx * sampleRateHz / real.length,
+                    magnitude: mag,
+                    percentage: (mag / maxMag) * 100
+                });
+                if (order > 1) {
+                    harmonicsSumSq += mag * mag;
+                }
+            }
+        }
+
+        const thd = (Math.sqrt(harmonicsSumSq) / maxMag) * 100;
+
+        return {
+            phaseId,
+            rms,
+            frequency: fundamentalFreq,
+            angleRad: fundamentalPhaseRad, // Raw phase relative to window
+            angleDeg: 0, // Will adjust relative to U later
+            thd,
+            harmonics
+        };
+    };
+
+    const phaseU = processPhase('U', dataU);
+    const phaseV = processPhase('V', dataV);
+    const phaseW = processPhase('W', dataW);
+
+    // Adjust angles relative to Phase U
+    const refAngle = phaseU.angleRad;
+    const normalizeAngle = (rad: number) => {
+        let deg = (rad * 180 / Math.PI) % 360;
+        if (deg > 180) deg -= 360;
+        if (deg < -180) deg += 360;
+        return deg;
+    };
+
+    phaseU.angleDeg = normalizeAngle(phaseU.angleRad - refAngle);
+    phaseV.angleDeg = normalizeAngle(phaseV.angleRad - refAngle);
+    phaseW.angleDeg = normalizeAngle(phaseW.angleRad - refAngle);
+
+    // Calculate Unbalance (IEEE 112: Max deviation from average / Average)
+    const avgRms = (phaseU.rms + phaseV.rms + phaseW.rms) / 3;
+    const maxDev = Math.max(
+        Math.abs(phaseU.rms - avgRms),
+        Math.abs(phaseV.rms - avgRms),
+        Math.abs(phaseW.rms - avgRms)
+    );
+    const unbalance = avgRms > 0 ? (maxDev / avgRms) * 100 : 0;
+
+    return {
+        fundamentalFreq: phaseU.frequency,
+        phases: [phaseU, phaseV, phaseW],
+        unbalance
     };
 };
 

@@ -512,7 +512,7 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className={`min-h-screen ${theme.bgApp} ${theme.textMain} font-sans transition-colors duration-300`}>
+    <div className={`min-h-screen flex flex-col ${theme.bgApp} ${theme.textMain} font-sans transition-colors duration-300`}>
       <header className={`${theme.bgCard} border-b ${theme.border} sticky top-0 z-20 shadow-md transition-colors duration-300`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -565,7 +565,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="w-full max-w-[95%] mx-auto px-4 py-6">
+      <main className="w-full max-w-[95%] mx-auto px-4 py-6 flex-1">
         {/* Upload Section - Only Show when IDLE or ERROR */}
         {(status === AnalysisStatus.IDLE || status === AnalysisStatus.ERROR) && (
             <div className="mb-6 animate-fade-in">
@@ -797,6 +797,12 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      <footer className={`w-full py-4 text-center border-t ${theme.border} mt-auto`}>
+         <span className={`text-[10px] font-mono ${theme.textMuted} opacity-70`}>
+           made by chaizhh@mese-cn.com
+         </span>
+      </footer>
     </div>
   );
 };
